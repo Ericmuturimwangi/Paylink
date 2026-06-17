@@ -1,8 +1,11 @@
 from __future__ import annotations
 import base64
-import datetime as dt  
+import datetime as dt
+import time
 import requests
 from django.conf import settings
+
+_token_cache: dict[str, tuple[str, float]] = {}
 
 from .base import(
     PaymentProvider, ChargeRequest, ChargeResponse, CallbackResult, CallbackOutcome,
@@ -21,14 +24,18 @@ class MpesaProvider(PaymentProvider):
         self.callback_url = cfg["CALLBACK_URL"]
 
     def _token(self) -> str:
-
+        cached = _token_cache.get(self.consumer_key)
+        if cached and cached[1] > time.time():
+            return cached[0]
         r = requests.get(
             f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials",
-            auth = (self.consumer_key, self.consumer_secret),
-            timeout = 30,
+            auth=(self.consumer_key, self.consumer_secret),
+            timeout=30,
         )
         r.raise_for_status()
-        return r.json()["access_token"]
+        token = r.json()["access_token"]
+        _token_cache[self.consumer_key] = (token, time.time() + 3300)
+        return token
 
     @staticmethod
     def _normalise_phone(phone: str) -> str:
@@ -128,7 +135,7 @@ class MpesaProvider(PaymentProvider):
         )
         data = r.json()
 
-        if "errorCode" in data:
+        if "errorCode" in data or "ResultCode" not in data:
             return CallbackResult(
                 dedupe_key=f"query:{provider_reference}",
                 outcome=CallbackOutcome.UNKNOWN,

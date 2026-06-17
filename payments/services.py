@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.db import transaction
 
-from .models import Payment, WebhookEvent
+from .models import Payment, WebhookEvent, AuditLog, AuditEvent
 from .money import Money
 from .states import PaymentStatus
 from .base import ChargeRequest, CallbackOutcome, CallbackResult
@@ -50,9 +50,16 @@ class PaymentService:
                 description = description,
                 reference = reference,
             ))
-        except Exception:
+        except Exception as exc:
             payment.transition_to(PaymentStatus.FAILED)
             payment.save(update_fields=["status", "updated_at"])
+            AuditLog.record(
+                payment=payment, event=AuditEvent.CHARGE_FAILED, source="api",
+                summary="provider rejected the charge",
+                from_status=PaymentStatus.PENDING.value,
+                to_status = PaymentStatus.FAILED.value,
+                metadata = {"error": str(exc)},
+            )
             raise
 
         payment.provider_reference = resp.provider_reference
@@ -136,13 +143,6 @@ class PaymentService:
         if payment is None:
             return False
 
-        if query_metadata is not None:
-            AuditLog.record(
-                payment=payment, event=AuditEvent.QUERY_PERFORMED, source=source,
-                summary=f"provider query -> {outcome.value}",
-                metadata=query_metadata,
-            )
-            
         return self._apply(payment, outcome, provider_receipt)
 
     @staticmethod
@@ -158,12 +158,6 @@ class PaymentService:
             payment.provider_receipt = provider_receipt
         payment.save()
 
-        if changed:
-            AuditLog.record(
-                payment=payment, event=AuditEvent.STATUS_CHANGED, source=source,
-                summary=f"{from_status} -> {target.value}",
-                from_status= from_status, to_status = target.value,
-            )
         return changed
 
 

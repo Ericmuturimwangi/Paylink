@@ -118,3 +118,20 @@ class AuditLog(models.Model):
     def delete(self, *args, **kwargs):
         raise ValueError("AuditLog is append-only: rows cannot be deleted")
 
+class Receipt(models.Model):
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payment = models.OneToOneField(
+        Payment, on_delete=models.PROTECT, related_name="receipt"
+    )
+
+    receipt_number = models.CharField(max_length=40, unique=True)
+    pdf = models.FileField(upload_to="receipts/")
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+
+    def __str__(self):
+        return self.receipt_number
+
+        
+    

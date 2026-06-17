@@ -6,6 +6,9 @@ from .models import Payment
 from .base import CallbackOutcome
 from .registry import get_provider
 from .services import PaymentService
+from .receipts import ReceiptService
+from datetime import timedelta
+
 
 _OPEN = {PaymentStatus.PENDING, PaymentStatus.PROCESSING}
 
@@ -21,6 +24,14 @@ def confirm_payment(self, payment_id: str):
 
     if not payment.provider_reference:
         return "no provider_reference yet"
+
+    if payment.provider_receipt:
+        PaymentService().apply_status(
+            payment_id=payment_id,
+            outcome=CallbackOutcome.PAID,
+            provider_receipt=payment.provider_receipt,
+        )
+        return "paid (receipt already present)"
 
     provider = get_provider(payment.provider)
     result= provider.query_status(payment.provider_reference)
@@ -99,5 +110,15 @@ def reconcile_payment(self, payment_id: str):
 
     raise self.retry()
 
+
+
+@shared_task
+def generate_receipt(payment_id: str):
+
+    payment = Payment.objects.filter(pk=payment_id).first()
+    if payment is None or payment.status != PaymentStatus.PAID.value:
+        return "skip: not paid"
+    ReceiptService().get_or_create(payment)
+    return "generated"
 
 

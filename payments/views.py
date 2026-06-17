@@ -49,7 +49,6 @@ class PaymentStatusVIew(APIView):
         
         return Response(PaymentStatusSerializer(payment).data)
 
-
 class PaymentAuditView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -72,7 +71,6 @@ class MpesaCallbackView(APIView):
         service.handle_callback(provider_name="mpesa", result=result)
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
-
 class PaystackCallbackView(APIView):
 
     permission_classes = [AllowAny]
@@ -91,4 +89,27 @@ class PaystackCallbackView(APIView):
 
         return Response(status=http.HTTP_200_OK)
 
-        
+class ReceiptDownloadView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+
+        payment = Payment.objects.filter(pk=pk).first()
+        if payment is None:
+            return Response(status=http.HTTP_404_NOT_FOUND)
+
+        if payment.status != PaymentStatusVIew.PAID.value:
+            return Response(
+                {"detail": "receipt is available only after the paymenr is confirmed paid"},
+                status=http.HTTP_409_CONFLICT,
+            )
+
+        from .receipts import ReceiptService
+        receipt = ReceiptService().get_or_create(payment)
+        return FileResponse(
+            receipt.pdf.open("rb"),
+            as_attachment = True,
+            filename = f"{receipt.receipt_number}.pdf",
+            content_type = "application/pdf",
+        )
