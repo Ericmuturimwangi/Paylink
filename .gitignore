@@ -1,0 +1,3 @@
+.env
+payments/migrations/
+payments/__pycache__/
