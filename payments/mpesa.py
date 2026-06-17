@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import base64
 import datetime as dt  
 import requests
@@ -21,7 +20,6 @@ class MpesaProvider(PaymentProvider):
         self.consumer_secret = cfg["CONSUMER_SECRET"]
         self.callback_url = cfg["CALLBACK_URL"]
 
-
     def _token(self) -> str:
 
         r = requests.get(
@@ -40,7 +38,6 @@ class MpesaProvider(PaymentProvider):
         if not (p.startswith("254") and len(p) == 12 and p.isdigit()):
             raise ValueError(f"Invalid M-Pesa phone: {phone!r}")
         return p
-
 
     def charge(self, req: ChargeRequest) -> ChargeResponse:
         ts = dt.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -108,6 +105,54 @@ class MpesaProvider(PaymentProvider):
             raw=payload,
         )
 
+    def callback_is_authoritative(self) -> bool:
+        return False
+    
+    def query_status(self, provider_reference: str) -> CallbackResult:
+
+        ts = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+        password = base64.b64encode(
+            f"{self.shortcode}{self.passkey}{ts}".encode()
+        ).decode()
+
+        r = requests.post(
+            f"{self.base_url}/mpesa/stkpushquery/v1/query",
+            json = {
+                "BusinessShortCode": self.shortcode,
+                "Password": password,
+                "Timestamp": ts,
+                "CheckoutRequestID": provider_reference,
+            },
+            headers = {"Authorization": f"Bearer {self._token()}"},
+            timeout = 30,
+        )
+        data = r.json()
+
+        if "errorCode" in data:
+            return CallbackResult(
+                dedupe_key=f"query:{provider_reference}",
+                outcome=CallbackOutcome.UNKNOWN,
+                provider_reference=provider_reference,
+                raw=data,
+            )
+
+        result_code = int(data["ResultCode"])
+        if result_code == 0:
+            outcome = CallbackOutcome.PAID
+        else:
+            outcome = {
+                1032: CallbackOutcome.CANCELLED,
+                1037: CallbackOutcome.EXPIRED,
+                1: CallbackOutcome.FAILED,
+            }.get(result_code, CallbackOutcome.FAILED)
+        return CallbackResult(
+            dedupe_key=f"query:{provider_reference}",
+            outcome=outcome,
+            provider_reference=provider_reference,
+            raw=data,
+        )
+
     def supports_refund(self) -> bool:
         return False
         
+

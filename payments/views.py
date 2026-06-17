@@ -39,7 +39,6 @@ class CreatePaymentView(APIView):
             PaymentStatusSerializer(payment).data, status=http.HTTP_201_CREATED
         )
 
-
 class PaymentStatusVIew(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -47,8 +46,19 @@ class PaymentStatusVIew(APIView):
         payment = Payment.objects.filter(pk=pk).first()
         if payment is None:
             return Response(status=http.HTTP_404_NOT_FOUND)
+        
         return Response(PaymentStatusSerializer(payment).data)
 
+
+class PaymentAuditView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        payment = Payment.objects.filter(pk=pk).first()
+        if payment is None:
+            return Response(status=http.HTTP_404_NOT_FOUND)
+        logs = payment.audit_logs.all()
+        return Response(AudtiLogSerializer(logs, many=True).data) 
 
 class MpesaCallbackView(APIView):
 
@@ -60,7 +70,7 @@ class MpesaCallbackView(APIView):
             headers = request.headers, body=request.body, payload = request.data,
         )
         service.handle_callback(provider_name="mpesa", result=result)
-        return Response(status=http.HTTP_200_OK)
+        return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
 
 class PaystackCallbackView(APIView):

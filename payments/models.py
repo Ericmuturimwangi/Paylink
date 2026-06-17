@@ -69,3 +69,52 @@ class WebhookEvent(models.Model):
 
         indexes = [models.Index(fields=["provider", "dedupe_key"])]
 
+class AuditEvent(models.TextChoices):
+    CREATED = "payment.created"
+    STK_INITIATED = "stk.initiated"
+    CHARGE_FAILED = "charge.failed"
+    CALLBACK_RECEIVED = "callback.received"
+    QUERY_PERFORMED = "query.performed"
+    STATUS_CHANGED = "status.changed"
+
+class AuditLog(models.Model):
+
+    id  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payment = models.ForeignKey(
+        Payment, on_delete=models.PROTECT, related_name="audit_logs"
+    )
+    event = models.CharField(max_length=32, choices=AuditEvent.choices)
+
+    source = models.CharField(max_length=32)
+    summary = models.CharField(max_length=255, blank=True)
+    from_status = models.CharField(max_length=16, blank=True)
+    to_status = models.CharField(max_length=16, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["payment", "created_at"])]
+
+    @classmethod
+    def record(cls, *, payment, event, source, summary="", from_status="", 
+                to_status="", metadata=None):
+        return cls.objects.create(
+            payment=payment,
+            event=event,
+            source=source,
+            summary=summary,
+            from_status=from_status,
+            to_status=to_status,
+            metadata=metadata or {},
+        )
+
+    def save(self, *args, **kwargs):
+        if self.pk and AuditLog.objects.filter(pk=self.pk).exists():
+            raise ValueError("AuditLog is append-only: rows cannot be modified")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("AuditLog is append-only: rows cannot be deleted")
+

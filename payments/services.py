@@ -25,7 +25,6 @@ class PaymentService:
         if existing:
             return existing
 
-
         money = Money.from_major(amount_major, currency)
         payment = Payment.objects.create(
             provider = provider_name,
@@ -36,6 +35,11 @@ class PaymentService:
             idempotency_key = idempotency_key,
             status = PaymentStatus.PENDING.value,
         ) 
+        AuditLog.record(
+            payment = payment, event = AuditEvent.CREATED, source="api",
+            summary = f"payment created for {money.major} {money.currency}",
+            to_status = PaymentStatus.PENDING.value,
+        )
 
         provider = get_provider(provider_name)
         try:
@@ -57,8 +61,23 @@ class PaymentService:
         payment.save(update_fields= [
             "provider_reference", "merchant_request_id", "status", "updated_at",
         ])
-        return payment
 
+        AuditLog.record(
+            payment = payment, event = AuditEvent.STK_INITIATED, source="api",
+            summary  = "charge accepted: awaiting sync confirmation",
+            from_status = PaymentStatus.PENDING.value,
+            to_status = PaymentStatus.PROCESSING.value,
+            metadata = {"provider_reference": resp.provider_reference,
+                        "merchant_request_id": payment.merchant_request_id
+                        },
+        )
+
+        if not provider.callback_is_authoritative():
+            from .tasks import confirm_payment
+            transaction.on_commit(
+                lambda: confirm_payment.apply_async((str(payment.id),), countdown=40)
+            )
+        return payment
 
     @transaction.atomic
     def handle_callback(self, *, provider_name: str, result: CallbackResult) -> bool:
@@ -83,24 +102,71 @@ class PaymentService:
             event.save(update_fields=["processed"])
             return False
 
-        target = _OUTCOME_TO_STATUS.get(result.outcome)
 
-        if target is not None:
-            try:
-                changed = payment.transition_to(target)
+        provider = get_provider(provider_name)
+        AuditLog.record(
+            payment= payment, event=AuditEvent.CALLBACK_RECEIVED,
+            source = f"{provider_name}_callback",
+            summary = f"callback outcome={result.outcome.value}, "
+                    f"authoritative={provider.callback_is_authoritative()}",
+            metadata = {"dedupe_key": result.dedupe_key,
+                        "receipt": result.provider_receipt},
+        )
 
-            except Exception:
-                
-                changed = False
-            if changed and result.provider_receipt:
+        if provider.callback_is_authoritative():
+            self._apply(payment, result.outcome, result.provider_receipt)
+        else:
+
+            if result.provider_receipt:
                 payment.provider_receipt = result.provider_receipt
-
-            payment.save()
-
+                payment.save(update_fields=["provider_receipt", "updated_at"])
+            from .tasks import confirm_payment
+            transaction.on_commit(
+                lambda: confirm_payment.delay(str(payment.id))
+            )
 
         event.processed = True
-        event.save(update_fields=['processed'])
-
+        event.save(update_fields=["processed"])
         return True
+
+    @transaction.atomic
+    def apply_status(self, *, payment_id, outcome: CallbackOutcome, provider_receipt: str = "") -> bool:
+
+        payment = Payment.objects.select_for_update().filter(pk=payment_id).first()
+        if payment is None:
+            return False
+
+        if query_metadata is not None:
+            AuditLog.record(
+                payment=payment, event=AuditEvent.QUERY_PERFORMED, source=source,
+                summary=f"provider query -> {outcome.value}",
+                metadata=query_metadata,
+            )
+            
+        return self._apply(payment, outcome, provider_receipt)
+
+    @staticmethod
+    def _apply(payment: Payment, outcome: CallbackOutcome, provider_receipt: str) -> bool:
+        target = _OUTCOME_TO_STATUS.get(outcome)
+        if target is None:
+            return False
+        try:
+            changed = payment.transition_to(target)
+        except Exception:
+            changed = False
+        if changed and provider_receipt:
+            payment.provider_receipt = provider_receipt
+        payment.save()
+
+        if changed:
+            AuditLog.record(
+                payment=payment, event=AuditEvent.STATUS_CHANGED, source=source,
+                summary=f"{from_status} -> {target.value}",
+                from_status= from_status, to_status = target.value,
+            )
+        return changed
+
+
+
         
 

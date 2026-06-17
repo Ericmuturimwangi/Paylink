@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: paylink
+      POSTGRES_USER: paylink
+      POSTGRES_PASSWORD: paylink
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    env_file: [.env]
+    ports: ["8000:8000"]
+    depends_on: [db, redis]
+
+  worker:
+    build: .
+    command: celery -A config worker -l info
+    env_file: [.env]
+    depends_on: [db, redis]
+
+volumes:
+  pgdata:
