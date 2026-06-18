@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.http import FileResponse
 from rest_framework import status as http
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -8,7 +9,8 @@ from rest_framework.views import APIView
 from .models import Payment
 from .registry import get_provider
 from .services import PaymentService
-from .serializers import CreatePaymentSerializer, PaymentStatusSerializer
+from .states import PaymentStatus
+from .serializers import CreatePaymentSerializer, PaymentStatusSerializer, AuditLogSerializer
 
 service = PaymentService()
 
@@ -57,17 +59,22 @@ class PaymentAuditView(APIView):
         if payment is None:
             return Response(status=http.HTTP_404_NOT_FOUND)
         logs = payment.audit_logs.all()
-        return Response(AudtiLogSerializer(logs, many=True).data) 
+        return Response(AuditLogSerializer(logs, many=True).data)
 
 class MpesaCallbackView(APIView):
 
     permission_classes = [AllowAny]
 
     def post(self, request):
+        body = request.body  
+        payload = request.data
+        if not payload:
+            return Response({"debug": "empty body"}, status=http.HTTP_400_BAD_REQUEST)
         provider = get_provider("mpesa")
-        result = provider.parse_callback(
-            headers = request.headers, body=request.body, payload = request.data,
-        )
+        try:
+            result = provider.parse_callback(headers=request.headers, body=body, payload=payload)
+        except KeyError as e:
+            return Response({"debug": f"KeyError: {e}", "payload": payload}, status=http.HTTP_400_BAD_REQUEST)
         service.handle_callback(provider_name="mpesa", result=result)
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
@@ -76,11 +83,12 @@ class PaystackCallbackView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        body = request.body  # must read before request.data consumes the stream
         provider = get_provider("paystack")
 
         try:
             result = provider.parse_callback(
-                headers= request.headers, body=request.body, payload=request.data,
+                headers=request.headers, body=body, payload=request.data,
             )
         except PermissionError:
             return Response(status=http.HTTP_401_UNAUTHORIZED)
@@ -99,7 +107,7 @@ class ReceiptDownloadView(APIView):
         if payment is None:
             return Response(status=http.HTTP_404_NOT_FOUND)
 
-        if payment.status != PaymentStatusVIew.PAID.value:
+        if payment.status != PaymentStatus.PAID.value:
             return Response(
                 {"detail": "receipt is available only after the paymenr is confirmed paid"},
                 status=http.HTTP_409_CONFLICT,
@@ -123,4 +131,4 @@ class ReconciliationSummaryView(APIView):
         if provider not in ("mpesa", "paystack"):
             return Response(status=http.HTTP_404_NOT_FOUND)
         from .reconciliation import ReconciliationService
-        return Response(ReconciliationService(). summary(provider))
+        return Response(ReconciliationService().summary(provider))

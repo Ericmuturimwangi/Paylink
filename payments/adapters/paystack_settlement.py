@@ -1,0 +1,1 @@
+from payments.paystack_settlement import PaystackSettlementAdapter

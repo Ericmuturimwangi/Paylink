@@ -130,7 +130,7 @@ class ReconciliationService:
             "unmatched_settlements": SettlementRecord.objects.filter(
                 provider=provider, status=SettlementStatus.UNMATCHED
             ).count(),
-            "settled_without_book": SettlementStatus.objects.filter(
+            "settled_without_book": SettlementRecord.objects.filter(
                 provider=provider, status=SettlementStatus.NO_BOOK_ENTRY
             ).count(),
             "amount_mismatches": SettlementRecord.objects.filter(provider=provider, status=SettlementStatus.AMOUNT_MISMATCH).count(),

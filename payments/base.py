@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-
 from .money import Money
 
 class CallbackOutcome(str, Enum):
@@ -12,7 +10,6 @@ class CallbackOutcome(str, Enum):
     CANCELLED = "cancelled"
     EXPIRED = "expired"
     UNKNOWN = "unknown"
-
 
 @dataclass
 class ChargeRequest:
@@ -27,7 +24,6 @@ class ChargeResponse:
     provider_reference: str
     extra: dict = field(default_factory=dict)
     raw: dict = field(default_factory=dict)
-
 
 @dataclass
 class CallbackResult:

@@ -85,7 +85,7 @@ class MpesaProvider(PaymentProvider):
 
     def parse_callback(self, *, headers, body, payload) -> CallbackResult:
 
-        cb = payload["Body"]["stkCallback"]
+        cb = payload.get("Body", payload).get("stkCallback", payload)
         checkout_id = cb["CheckoutRequestID"]
         result_code = int(cb["ResultCode"])
 

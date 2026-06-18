@@ -28,4 +28,14 @@ class PaymentStatusSerializer(serializers.Serializer):
         from .money import Money
         return str(Money(obj.amount_minor, obj.currency).major)
 
+
+class AuditLogSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    event = serializers.CharField()
+    source = serializers.CharField()
+    summary = serializers.CharField()
+    from_status = serializers.CharField()
+    to_status = serializers.CharField()
+    metadata = serializers.JSONField()
+    created_at = serializers.DateTimeField()
         
