@@ -12,7 +12,7 @@ class Money:
     currency: str
 
 
-    def __post__int__(self) -> None:
+    def __post_init__(self) -> None:
         if self.currency not in _EXPONENT:
             raise ValueError(f"Unsupported currency: {self.currency!r}")
         if not isinstance(self.minor, int):

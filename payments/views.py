@@ -113,3 +113,14 @@ class ReceiptDownloadView(APIView):
             filename = f"{receipt.receipt_number}.pdf",
             content_type = "application/pdf",
         )
+
+
+class ReconciliationSummaryView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, provider):
+        if provider not in ("mpesa", "paystack"):
+            return Response(status=http.HTTP_404_NOT_FOUND)
+        from .reconciliation import ReconciliationService
+        return Response(ReconciliationService(). summary(provider))

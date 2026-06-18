@@ -1,3 +1,4 @@
 .env
 payments/migrations/
 payments/__pycache__/
+payments/tests/

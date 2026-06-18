@@ -8,6 +8,7 @@ from .registry import get_provider
 from .services import PaymentService
 from .receipts import ReceiptService
 from datetime import timedelta
+from django.utils import timezone
 
 
 _OPEN = {PaymentStatus.PENDING, PaymentStatus.PROCESSING}
@@ -65,7 +66,7 @@ def reconcile_stuck_payments():
         .values_list("id", flat=True)[:RECONCILE_BATCH]
     )
     for pid in stuck_ids:
-        reconcile_stuck_payments.delay(str(pid))
+        reconcile_payment.delay(str(pid))
     return f"dispatched {len(stuck_ids)}"
 
 

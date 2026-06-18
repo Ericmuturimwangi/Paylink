@@ -31,7 +31,7 @@ class PaystackProvider(PaymentProvider):
         outcome ={
             "charge.success": CallbackOutcome.PAID,
             "charge.failed": CallbackOutcome.FAILED,
-        }.get(event, CallbackOutcome.UNKOWN)
+        }.get(event, CallbackOutcome.UNKNOWN)
 
         return CallbackResult(
             dedupe_key = str(payload.get("id") or reference),

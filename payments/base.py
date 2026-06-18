@@ -49,6 +49,9 @@ class PaymentProvider(ABC):
         """normalise a provider webhook into a callback """
 
 
+    def callback_is_authoritative(self) -> bool:
+        return True
+
     def supports_refund(self) -> bool:
         return False
 
