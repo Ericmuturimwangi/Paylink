@@ -66,15 +66,10 @@ class MpesaCallbackView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        body = request.body  
+        body = request.body
         payload = request.data
-        if not payload:
-            return Response({"debug": "empty body"}, status=http.HTTP_400_BAD_REQUEST)
         provider = get_provider("mpesa")
-        try:
-            result = provider.parse_callback(headers=request.headers, body=body, payload=payload)
-        except KeyError as e:
-            return Response({"debug": f"KeyError: {e}", "payload": payload}, status=http.HTTP_400_BAD_REQUEST)
+        result = provider.parse_callback(headers=request.headers, body=body, payload=payload)
         service.handle_callback(provider_name="mpesa", result=result)
         return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
 
