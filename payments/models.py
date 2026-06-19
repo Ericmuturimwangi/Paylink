@@ -22,6 +22,7 @@ class Payment(models.Model):
     customer_phone = models.CharField(max_length=20, blank=True)
     customer_email = models.EmailField(blank=True)
     description = models.CharField(max_length=255, blank=True)
+    reference = models.CharField(max_length=64, blank=True, db_index=True)
 
     provider_reference = models.CharField(max_length=128, blank=True)
     merchant_request_id = models.CharField(max_length=128, blank=True)
@@ -58,7 +59,6 @@ class WebhookEvent(models.Model):
     payload = models.JSONField()
     received_at = models.DateTimeField(auto_now_add=True)
     processed = models.BooleanField(default=False)
-
 
     class Meta:
         constraints = [

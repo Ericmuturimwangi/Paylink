@@ -1,5 +1,5 @@
-from payments.mpesa_statement import MpesaStatementAdapter
-from payments.paystack_settlement import PaystackSettlementAdapter
+from .mpesa_statement import MpesaStatementAdapter
+from .paystack_settlement import PaystackSettlementAdapter
 
 _ADAPTERS = {
     "mpesa": MpesaStatementAdapter,
